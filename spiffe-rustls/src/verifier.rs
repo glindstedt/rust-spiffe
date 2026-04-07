@@ -527,8 +527,22 @@ impl rustls::client::danger::ServerCertVerifier for SpiffeServerCertVerifier {
         let inner = self.get_or_build_inner(trust_domain).map_err(other_err)?;
 
         // Step 4: Verify certificate chain cryptographically
-        let ok =
-            inner.verify_server_cert(end_entity, intermediates, server_name, ocsp_response, now)?;
+        let ok = match inner.verify_server_cert(
+            end_entity,
+            intermediates,
+            server_name,
+            ocsp_response,
+            now,
+        ) {
+            Ok(ok) => ok,
+            Err(rustls::Error::InvalidCertificate(
+                rustls::CertificateError::NotValidForName,
+            ))
+            | Err(rustls::Error::InvalidCertificate(
+                rustls::CertificateError::NotValidForNameContext { .. },
+            )) => rustls::client::danger::ServerCertVerified::assertion(),
+            Err(e) => return Err(e),
+        };
 
         // Step 5: Apply authorization (only after cryptographic verification succeeds)
         if !self.authorizer.authorize(&spiffe_id) {
